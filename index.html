@@ -711,26 +711,32 @@ let state = {
 // INIT
 // ══════════════════════════════════════════════
 async function init() {
+  // Always load data first
+  try {
+    const data = await api("getAll");
+    state.users = data.users || [];
+    state.spots = data.spots || [];
+    state.availability = (data.availability || []).filter(a => a.status === "available");
+    state.reservations = (data.reservations || []).filter(r => r.status === "active");
+    state.config = Object.fromEntries((data.config || []).map(r => [r.key, r.value]));
+  } catch(e) { console.error("Data load error:", e); }
+
   // Restore session
-  const saved = localStorage.getItem('parkUser');
+  const saved = localStorage.getItem("parkUser");
   if (saved) {
     try {
       state.user = JSON.parse(saved);
-      await loadData();
-      showMain();
-      return;
-    } catch(e) { localStorage.removeItem('parkUser'); }
+      const u = state.users.find(u => u.id === state.user.id);
+      if (u && (u.active == true || u.active === "TRUE" || u.active === "true")) {
+        showMain();
+        return;
+      } else {
+        localStorage.removeItem("parkUser");
+      }
+    } catch(e) { localStorage.removeItem("parkUser"); }
   }
-  // Load user list for login
-  try {
-    const data = await api('getAll');
-    state.users = data.users || [];
-    state.spots = data.spots || [];
-    state.availability = data.availability || [];
-    state.reservations = data.reservations || [];
-    state.config = Object.fromEntries((data.config || []).map(r => [r.key, r.value]));
-    populateLoginSelect();
-  } catch(e) { console.error(e); }
+
+  populateLoginSelect();
 }
 
 function populateLoginSelect() {
