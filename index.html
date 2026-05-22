@@ -179,6 +179,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <div class="legend-item"><div class="legend-dot" style="background:var(--gray2)"></div>Bezet</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--green2)"></div>Beschikbaar</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--blue2)"></div>Gereserveerd</div>
+    <div class="legend-item">⚡ Laadpaal</div>
   </div>
   <div class="week-nav">
     <button class="week-nav-btn" onclick="shiftWindow(-7)">◀</button>
@@ -248,7 +249,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <input class="form-input" id="editSpotNumber" placeholder="250" inputmode="numeric">
     <label class="form-label">Eigenaar(s)</label>
     <select class="form-select" id="editSpotOwners" multiple style="height:130px;margin-bottom:4px"></select>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:0">Houd Ctrl/Cmd ingedrukt voor meerdere eigenaren</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Houd Ctrl/Cmd ingedrukt voor meerdere eigenaren</div>
+    <label style="display:flex;align-items:center;gap:10px;font-size:16px;color:var(--text);cursor:pointer;margin-bottom:0">
+      <input type="checkbox" id="editSpotCharger" style="width:20px;height:20px;cursor:pointer">
+      ⚡ Heeft laadpaal
+    </label>
     <div class="modal-actions">
       <button class="btn outline" onclick="closeModal('spotModal')">Annuleren</button>
       <button class="btn" onclick="saveSpot()">Opslaan</button>
@@ -527,7 +532,8 @@ function renderGrid() {
       return covered < aE; // gap at the end
     });
     const dot = hasFutureAvail ? '<span class="avail-dot" title="Heeft beschikbaarheid"></span>' : '';
-    label.innerHTML = `<div class="spot-number" style="display:flex;align-items:center">${spot.number}${dot}</div><div class="spot-owner">${getOwnerNames(spot)}</div>`;
+    const charger = spot.hasCharger ? '<span title="Laadpaal beschikbaar" style="margin-left:4px;font-size:12px">⚡</span>' : '';
+    label.innerHTML = `<div class="spot-number" style="display:flex;align-items:center">${spot.number}${charger}${dot}</div><div class="spot-owner">${getOwnerNames(spot)}</div>`;
     wrapper.appendChild(label);
 
     for (let i=0; i<COLS; i++) {
@@ -913,8 +919,10 @@ window.openSpotModal = function(spotId=null) {
     document.getElementById('editSpotNumber').value=state.spots[spotId].number;
     const owners=(state.spots[spotId].ownerIds||'').split(',').map(x=>x.trim());
     Array.from(sel.options).forEach(o=>o.selected=owners.includes(o.value));
+    document.getElementById('editSpotCharger').checked=!!state.spots[spotId].hasCharger;
   } else {
     document.getElementById('editSpotNumber').value='';
+    document.getElementById('editSpotCharger').checked=false;
   }
   document.getElementById('spotModal').classList.add('active');
 };
@@ -925,7 +933,8 @@ window.saveSpot = async function() {
   const sel=document.getElementById('editSpotOwners');
   const ownerIds=Array.from(sel.selectedOptions).map(o=>o.value).join(',');
   if (!number){showToast('Vul een nummer in','error');return;}
-  const data={number,ownerIds};
+  const hasCharger=document.getElementById('editSpotCharger').checked;
+  const data={number,ownerIds,hasCharger};
   await set(ref(db,`spots/${id}`),data);
   state.spots[id]=data;
   closeModal('spotModal');
