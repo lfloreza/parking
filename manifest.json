@@ -1,0 +1,17 @@
+{
+  "name": "Parkeerplaats Deler",
+  "short_name": "Parkeerplaats",
+  "description": "Parkeerplaats delen met buren",
+  "start_url": "/parking/",
+  "display": "standalone",
+  "background_color": "#0a0f1e",
+  "theme_color": "#0a0f1e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
