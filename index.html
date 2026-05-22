@@ -7,6 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>🅿️ Parkeerplaats Deler</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parkeerplaats">
+<link rel="apple-touch-icon" href="icon.png">
 <style>
 :root {
   --bg:#0a0f1e;--bg2:#111827;--bg3:#1a2235;--card:#1e2d45;
@@ -18,8 +23,8 @@
   --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;font-size:16px}
-.screen{display:none;flex-direction:column;height:100vh}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100dvh;overflow:hidden;font-size:16px}
+.screen{display:none;flex-direction:column;height:100dvh}
 .screen.active{display:flex}
 
 /* LOGIN */
@@ -63,12 +68,14 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .grid-container::-webkit-scrollbar{width:4px;height:4px}
 .grid-container::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .grid-wrapper{display:grid;min-width:max-content}
-.grid-spot-label{position:sticky;left:0;background:var(--bg2);border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 12px;min-width:110px;z-index:10;display:flex;flex-direction:column;justify-content:center}
+.grid-spot-label{position:sticky;left:0;background:var(--bg2);border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 12px;min-width:110px;z-index:8;display:flex;flex-direction:column;justify-content:center}
 .spot-number{font-size:15px;font-weight:700;color:var(--text);font-family:var(--mono)}
 .spot-owner{font-size:11px;color:var(--text3);margin-top:2px}
-.grid-time-header{position:sticky;top:0;background:var(--bg2);border-bottom:1px solid var(--border);border-right:1px solid rgba(255,255,255,0.05);padding:8px 4px;text-align:center;font-size:11px;font-family:var(--mono);color:var(--text3);z-index:9;min-width:52px}
+.grid-day-header{position:sticky;top:0;background:var(--bg3);border-bottom:1px solid var(--accent);border-right:1px solid var(--border);padding:5px 4px;text-align:center;font-size:12px;font-weight:700;color:var(--accent2);z-index:10;min-width:52px;white-space:nowrap;letter-spacing:0.02em}
+.grid-day-header.corner-day{position:sticky;left:0;top:0;z-index:12;background:var(--bg2);min-width:110px;border-right:1px solid var(--border)}
+.grid-time-header{position:sticky;top:28px;background:var(--bg2);border-bottom:1px solid var(--border);border-right:1px solid rgba(255,255,255,0.05);padding:6px 4px;text-align:center;font-size:11px;font-family:var(--mono);color:var(--text3);z-index:9;min-width:52px}
 .grid-time-header.hour{color:var(--text2);font-weight:600;border-right:1px solid var(--border)}
-.grid-time-header.corner{position:sticky;left:0;top:0;z-index:11;background:var(--bg2);border-right:1px solid var(--border);min-width:110px}
+.grid-time-header.corner{position:sticky;left:0;top:28px;z-index:11;background:var(--bg2);border-right:1px solid var(--border);min-width:110px}
 .grid-cell{border-right:1px solid rgba(255,255,255,0.04);border-bottom:1px solid var(--border);min-width:52px;height:52px;cursor:pointer;position:relative;background:var(--gray)}
 .grid-cell:hover{filter:brightness(1.2)}
 .grid-cell.hour-start{border-right:1px solid var(--border)}
@@ -405,17 +412,42 @@ function renderGrid() {
   wrapper.className = 'grid-wrapper';
   wrapper.style.gridTemplateColumns = `110px repeat(${COLS},52px)`;
 
-  // Corner + time headers
+  // Row 1: Day headers
+  const dayCorner = document.createElement('div');
+  dayCorner.className = 'grid-day-header corner-day';
+  dayCorner.style.cssText = 'grid-row:1;grid-column:1';
+  wrapper.appendChild(dayCorner);
+
+  const nlDays = ['zo','ma','di','wo','do','vr','za'];
+  const nlMonths = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  let lastDay = -1;
+  for (let i=0; i<COLS; i++) {
+    const t = new Date(startDate); t.setMinutes(i*SLOT);
+    const dayKey = t.toDateString();
+    const th = document.createElement('div');
+    th.className = 'grid-day-header';
+    th.style.cssText = `grid-row:1;grid-column:${i+2}`;
+    // Only show label at start of each day (midnight slot)
+    if (t.getHours()===0 && t.getMinutes()===0) {
+      const isToday = t.toDateString() === now.toDateString();
+      th.textContent = isToday ? '📍 Vandaag' : `${nlDays[t.getDay()]} ${t.getDate()} ${nlMonths[t.getMonth()]}`;
+      if (isToday) th.style.color = 'var(--yellow)';
+      th.style.borderLeft = '2px solid var(--border)';
+    }
+    wrapper.appendChild(th);
+  }
+
+  // Row 2: Time headers
   const corner = document.createElement('div');
   corner.className = 'grid-time-header corner';
-  corner.style.cssText = 'grid-row:1;grid-column:1';
+  corner.style.cssText = 'grid-row:2;grid-column:1';
   wrapper.appendChild(corner);
 
   for (let i=0; i<COLS; i++) {
     const t = new Date(startDate); t.setMinutes(i*SLOT);
     const th = document.createElement('div');
     th.className = 'grid-time-header'+(t.getMinutes()===0?' hour':'');
-    th.style.cssText = `grid-row:1;grid-column:${i+2}`;
+    th.style.cssText = `grid-row:2;grid-column:${i+2}`;
     th.textContent = t.getMinutes()===0 ? `${String(t.getHours()).padStart(2,'0')}:00` : ':30';
     wrapper.appendChild(th);
   }
@@ -424,7 +456,7 @@ function renderGrid() {
     const mySpot = isMySpot(spot);
     const label = document.createElement('div');
     label.className = 'grid-spot-label';
-    label.style.cssText = `grid-row:${si+2};grid-column:1`;
+    label.style.cssText = `grid-row:${si+3};grid-column:1`;
     label.innerHTML = `<div class="spot-number">${spot.number}</div><div class="spot-owner">${getOwnerNames(spot)}</div>`;
     wrapper.appendChild(label);
 
@@ -433,7 +465,7 @@ function renderGrid() {
       const slotEnd = new Date(slotStart); slotEnd.setMinutes(slotEnd.getMinutes()+SLOT);
       const cell = document.createElement('div');
       cell.className = 'grid-cell'+(i%2===0?' hour-start':'');
-      cell.style.cssText = `grid-row:${si+2};grid-column:${i+2}`;
+      cell.style.cssText = `grid-row:${si+3};grid-column:${i+2}`;
       if (slotEnd<=now) cell.classList.add('past');
 
       const availEntry = getAvailEntry(spotId,slotStart,slotEnd);
