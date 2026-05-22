@@ -74,11 +74,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .grid-spot-label{position:sticky;left:0;background:var(--bg2);border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 12px;min-width:110px;z-index:8;display:flex;flex-direction:column;justify-content:center}
 .spot-number{font-size:15px;font-weight:700;color:var(--text);font-family:var(--mono)}
 .spot-owner{font-size:11px;color:var(--text3);margin-top:2px}
-.grid-day-header{position:sticky;top:0;background:var(--bg3);border-bottom:1px solid var(--accent);border-right:1px solid var(--border);padding:5px 4px;text-align:center;font-size:12px;font-weight:700;color:var(--accent2);z-index:10;min-width:52px;white-space:nowrap;letter-spacing:0.02em}
+.grid-day-header{position:sticky;top:0;background:var(--bg3);border-bottom:2px solid var(--accent);border-right:1px solid var(--border);padding:7px 4px;text-align:center;font-size:13px;font-weight:700;color:var(--accent2);z-index:10;min-width:52px;white-space:nowrap;letter-spacing:0.02em;height:32px}
 .grid-day-header.corner-day{position:sticky;left:0;top:0;z-index:12;background:var(--bg2);min-width:110px;border-right:1px solid var(--border)}
-.grid-time-header{position:sticky;top:28px;background:var(--bg2);border-bottom:1px solid var(--border);border-right:1px solid rgba(255,255,255,0.05);padding:6px 4px;text-align:center;font-size:11px;font-family:var(--mono);color:var(--text3);z-index:9;min-width:52px}
+.grid-time-header{position:sticky;top:32px;background:var(--bg2);border-bottom:1px solid var(--border);border-right:1px solid rgba(255,255,255,0.05);padding:6px 4px;text-align:center;font-size:11px;font-family:var(--mono);color:var(--text3);z-index:9;min-width:52px}
 .grid-time-header.hour{color:var(--text2);font-weight:600;border-right:1px solid var(--border)}
-.grid-time-header.corner{position:sticky;left:0;top:28px;z-index:11;background:var(--bg2);border-right:1px solid var(--border);min-width:110px}
+.grid-time-header.corner{position:sticky;left:0;top:32px;z-index:11;background:var(--bg2);border-right:1px solid var(--border);min-width:110px}
 .grid-cell{border-right:1px solid rgba(255,255,255,0.04);border-bottom:1px solid var(--border);min-width:52px;height:52px;cursor:pointer;position:relative;background:var(--gray)}
 .grid-cell:hover{filter:brightness(1.2)}
 .grid-cell.hour-start{border-right:1px solid var(--border)}
@@ -179,10 +179,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <div class="legend-item"><div class="legend-dot" style="background:var(--blue2)"></div>Gereserveerd</div>
   </div>
   <div class="week-nav">
-    <button class="week-nav-btn" onclick="shiftWindow(-7)">◀ Vorige</button>
-    <div class="week-nav-label" id="weekNavLabel"></div>
+    <button class="week-nav-btn" onclick="shiftWindow(-7)">◀</button>
+    <div class="week-nav-label" id="weekNavLabel" onclick="document.getElementById('datePicker').showPicker()" style="cursor:pointer">
+      <span id="weekNavText"></span> 📅
+      <input type="date" id="datePicker" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none" onchange="jumpToDate(this.value)">
+    </div>
     <button class="week-nav-btn today" onclick="goToToday()">Vandaag</button>
-    <button class="week-nav-btn" onclick="shiftWindow(7)">Volgende ▶</button>
+    <button class="week-nav-btn" onclick="shiftWindow(7)">▶</button>
   </div>
   <div class="grid-container" id="gridContainer">
     <div class="loading"><div class="spinner"></div><div style="color:var(--text2)">Laden...</div></div>
@@ -416,12 +419,24 @@ window.goToToday = function() {
   renderGrid();
 };
 
+window.jumpToDate = function(dateStr) {
+  if (!dateStr) return;
+  const picked = new Date(dateStr + 'T00:00:00');
+  const today = getToday();
+  const minDate = new Date(today); minDate.setDate(today.getDate()-2);
+  const maxDate = new Date(today); maxDate.setDate(today.getDate()+53);
+  if (picked < minDate) picked.setTime(minDate.getTime());
+  if (picked > maxDate) picked.setTime(maxDate.getTime());
+  state._windowStart = picked;
+  renderGrid();
+};
+
 function updateWeekLabel() {
   const start = new Date(state._windowStart);
   const end = new Date(start); end.setDate(end.getDate()+6);
   const nlMonths=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
   const fmt = d => `${d.getDate()} ${nlMonths[d.getMonth()]}`;
-  document.getElementById('weekNavLabel').textContent = `${fmt(start)} – ${fmt(end)}`;
+  const el=document.getElementById('weekNavText'); if(el) el.textContent=`${fmt(start)} – ${fmt(end)}`;
 }
 
 // ── GRID ──
@@ -435,7 +450,7 @@ function renderGrid() {
     return;
   }
 
-  const SLOT=30, DAYS=7, COLS=DAYS*48; // 7 days × 48 slots
+  const SLOT=60, DAYS=7, COLS=DAYS*24; // 7 days × 24 slots
   const startDate = new Date(state._windowStart);
   const now = new Date();
   const nlDays=['zo','ma','di','wo','do','vr','za'];
@@ -476,7 +491,7 @@ function renderGrid() {
     const th = document.createElement('div');
     th.className = 'grid-time-header'+(t.getMinutes()===0?' hour':'');
     th.style.cssText = `grid-row:2;grid-column:${i+2}`;
-    th.textContent = t.getMinutes()===0 ? `${String(t.getHours()).padStart(2,'0')}:00` : ':30';
+    th.textContent = `${String(t.getHours()).padStart(2,'0')}:00`;
     wrapper.appendChild(th);
   }
 
@@ -493,7 +508,7 @@ function renderGrid() {
       const slotStart = new Date(startDate); slotStart.setMinutes(i*SLOT);
       const slotEnd = new Date(slotStart); slotEnd.setMinutes(slotEnd.getMinutes()+SLOT);
       const cell = document.createElement('div');
-      cell.className = 'grid-cell'+(i%2===0?' hour-start':'');
+      cell.className = 'grid-cell hour-start';
       cell.style.cssText = `grid-row:${si+3};grid-column:${i+2}`;
       if (slotEnd<=now) cell.classList.add('past');
 
@@ -592,7 +607,7 @@ window.showAvailForm = function(spotId,spotNum,fromISO) {
   html += `<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Tot datum</label><input type="date" class="time-select" id="aToDate" value="${fmtDate(from)}"></div><div class="time-picker-group"><label class="form-label">Tot tijd</label><select class="time-select" id="aToTime">${opts}</select></div></div>`;
   html += `<div class="sheet-actions"><button class="btn green" id="confirmAvailBtn" onclick="confirmAvail('${spotId}','${spotNum}')">✅ Bevestigen & Verstuur WhatsApp</button><button class="btn outline" onclick="closeSheet()">Annuleren</button></div>`;
   openSheet(html);
-  setVal('aFromTime',roundSlot(from));
+  from.setMinutes(0,0,0); setVal('aFromTime',roundSlot(from));
   const to=new Date(from); to.setHours(to.getHours()+2);
   setVal('aToTime',roundSlot(to));
 };
@@ -618,24 +633,31 @@ window.confirmAvail = async function(spotId,spotNum) {
 
 // ── RESERVE FORM ──
 window.showReserveForm = function(spotId,spotNum,availId,availStart,availEnd,slotISO) {
-  const aS=new Date(availStart),aE=new Date(availEnd);
-  // Pre-fill start from tapped slot, clamped to availability window
-  const tapped = slotISO ? new Date(slotISO) : aS;
-  const preStart = tapped < aS ? aS : tapped > aE ? aS : tapped;
-  // Pre-fill end: 1 hour after start, clamped to availability end
-  const preEnd = new Date(preStart); preEnd.setHours(preEnd.getHours()+1);
-  const clampedEnd = preEnd > aE ? aE : preEnd;
-  // Build time options filtered to availability window
-  const opts=timeOpts(aS,aE);
+  const aS=new Date(availStart), aE=new Date(availEnd);
+
+  // Pre-fill start from tapped slot, clamped strictly inside availability window
+  const tapped = slotISO ? new Date(slotISO) : new Date(aS);
+  // Clamp to [aS, aE - 1hour]
+  const maxStart = new Date(aE); maxStart.setHours(maxStart.getHours()-1);
+  let preStart = tapped < aS ? new Date(aS) : tapped > maxStart ? new Date(maxStart) : new Date(tapped);
+  // Round to hour
+  preStart.setMinutes(0,0,0);
+  if (preStart < aS) preStart = new Date(aS);
+
+  // Pre-fill end: 1 hour after preStart, clamped to aE
+  let preEnd = new Date(preStart); preEnd.setHours(preEnd.getHours()+1);
+  if (preEnd > aE) preEnd = new Date(aE);
+
+  const opts=timeOpts();
   let html=`<div class="sheet-title">✅ Reserveren</div><div class="sheet-sub">Parkeerplaats ${spotNum}</div>`;
   html+=`<div class="info-row"><span class="info-label">Beschikbaar van</span><span class="info-value">${fmtDT(aS)}</span></div>`;
   html+=`<div class="info-row" style="margin-bottom:16px"><span class="info-label">Beschikbaar tot</span><span class="info-value">${fmtDT(aE)}</span></div>`;
   html+=`<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Van datum</label><input type="date" class="time-select" id="rFromDate" value="${fmtDate(preStart)}" min="${fmtDate(aS)}" max="${fmtDate(aE)}"></div><div class="time-picker-group"><label class="form-label">Van tijd</label><select class="time-select" id="rFromTime">${opts}</select></div></div>`;
-  html+=`<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Tot datum</label><input type="date" class="time-select" id="rToDate" value="${fmtDate(clampedEnd)}" min="${fmtDate(aS)}" max="${fmtDate(aE)}"></div><div class="time-picker-group"><label class="form-label">Tot tijd</label><select class="time-select" id="rToTime">${opts}</select></div></div>`;
+  html+=`<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Tot datum</label><input type="date" class="time-select" id="rToDate" value="${fmtDate(preEnd)}" min="${fmtDate(aS)}" max="${fmtDate(aE)}"></div><div class="time-picker-group"><label class="form-label">Tot tijd</label><select class="time-select" id="rToTime">${opts}</select></div></div>`;
   html+=`<div class="sheet-actions"><button class="btn" id="confirmResBtn" onclick="confirmRes('${spotId}','${spotNum}','${availId}','${availStart}','${availEnd}')">✅ Bevestigen & Verstuur WhatsApp</button><button class="btn outline" onclick="closeSheet()">Annuleren</button></div>`;
   openSheet(html);
-  setVal('rFromTime',roundSlot(preStart));
-  setVal('rToTime',roundSlot(clampedEnd));
+  setVal('rFromTime', `${String(preStart.getHours()).padStart(2,'0')}:00`);
+  setVal('rToTime', `${String(preEnd.getHours()).padStart(2,'0')}:00`);
 };
 
 window.confirmRes = async function(spotId,spotNum,availId,availStart,availEnd) {
@@ -762,16 +784,15 @@ window.showToast = function(msg,type='') {
 };
 
 // ── UTILS ──
-function timeOpts(minDt,maxDt){
+function timeOpts(){
   let o='';
-  for(let h=0;h<24;h++) for(let m of[0,30]){
-    const v=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-    // If bounds provided, only include times within range (same-day check)
+  for(let h=0;h<24;h++){
+    const v=`${String(h).padStart(2,'0')}:00`;
     o+=`<option value="${v}">${v}</option>`;
   }
   return o;
 }
-function roundSlot(d){return `${String(d.getHours()).padStart(2,'0')}:${d.getMinutes()<30?'00':'30'}`;}
+function roundSlot(d){return `${String(d.getHours()).padStart(2,'0')}:00`;}
 function setVal(id,v){const el=document.getElementById(id);if(el)el.value=v;}
 
 // ── ADMIN ──
