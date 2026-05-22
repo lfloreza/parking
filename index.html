@@ -505,9 +505,27 @@ function renderGrid() {
     label.style.cssText = `grid-row:${si+3};grid-column:1`;
     // Check if spot has any future availability
     const now2 = new Date();
-    const hasFutureAvail = Object.values(state.availability).some(a =>
-      a.spotId === spotId && a.status === 'available' && new Date(a.end) > now2
-    );
+    const hasFutureAvail = Object.values(state.availability).some(a => {
+      if (a.spotId !== spotId || a.status !== 'available' || new Date(a.end) <= now2) return false;
+      // Check if any part of this window is NOT fully covered by reservations
+      const aS = new Date(a.start) < now2 ? now2 : new Date(a.start);
+      const aE = new Date(a.end);
+      // Get all active reservations for this spot overlapping this window
+      const reses = Object.values(state.reservations).filter(r =>
+        r.spotId === spotId && r.status === 'active' &&
+        new Date(r.start) < aE && new Date(r.end) > aS
+      );
+      if (!reses.length) return true; // fully free
+      // Check if reservations cover the entire window
+      // Sort by start, see if there's any gap
+      const sorted = reses.sort((a,b) => new Date(a.start)-new Date(b.start));
+      let covered = new Date(aS);
+      for (const r of sorted) {
+        if (new Date(r.start) > covered) return true; // gap found
+        if (new Date(r.end) > covered) covered = new Date(r.end);
+      }
+      return covered < aE; // gap at the end
+    });
     const dot = hasFutureAvail ? '<span class="avail-dot" title="Heeft beschikbaarheid"></span>' : '';
     label.innerHTML = `<div class="spot-number" style="display:flex;align-items:center">${spot.number}${dot}</div><div class="spot-owner">${getOwnerNames(spot)}</div>`;
     wrapper.appendChild(label);
