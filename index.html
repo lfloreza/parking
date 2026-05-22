@@ -615,24 +615,52 @@ window.cancelAvailability = async function(availId,spotNum,start,end) {
 // User arrives in group and pastes — one tap
 function sendWA(type,spotNum,start,end,name='') {
   const appUrl = state.config.appUrl;
+  const groupLink = state.config.whatsappLink;
   const fmt = dt => dt.toLocaleString('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
   let msg='';
   if (type==='available') msg=`🅿️ Parkeerplaats ${spotNum} is beschikbaar gesteld\nVan: ${fmt(start)}\nTot: ${fmt(end)}\n\nReserveer via: ${appUrl}`;
   else if (type==='reserved') msg=`✅ Parkeerplaats ${spotNum} is gereserveerd door ${name}\nVan: ${fmt(start)}\nTot: ${fmt(end)}\n\nBekijk via: ${appUrl}`;
   else msg=`❌ Parkeerplaats ${spotNum} — reservering/beschikbaarheid geannuleerd\nVan: ${fmt(start)}\nTot: ${fmt(end)}\n\nBekijk via: ${appUrl}`;
 
-  // Copy to clipboard then open group
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(msg).then(()=>{
-      showToast('📋 Bericht gekopieerd! Openen WhatsApp groep...','info');
-      setTimeout(()=>{ window.open(state.config.whatsappLink,'_blank'); },1000);
-    }).catch(()=>{
-      window.open(state.config.whatsappLink,'_blank');
-    });
-  } else {
-    window.open(state.config.whatsappLink,'_blank');
-  }
+  window._waPendingMsg = msg;
+  window._waGroupLink = groupLink;
+
+  const escaped = msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  const html = `
+    <div class="sheet-title">📲 Stuur bericht naar groep</div>
+    <div class="sheet-sub">Stap 1: Kopieer het bericht. Stap 2: Open de groep en plak.</div>
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;font-size:15px;line-height:1.7;margin-bottom:20px;color:var(--text)">
+      ${escaped}
+    </div>
+    <div class="sheet-actions">
+      <button class="btn green" style="font-size:18px;padding:20px" onclick="copyWAMsg()">📋 Stap 1 — Kopieer bericht</button>
+      <button class="btn" style="font-size:18px;padding:20px;background:#25D366" onclick="openWAGroup()">💬 Stap 2 — Open WhatsApp Groep</button>
+      <button class="btn outline" onclick="closeSheet()">Sluiten</button>
+    </div>`;
+  openSheet(html);
 }
+
+window.copyWAMsg = function() {
+  const msg = window._waPendingMsg || '';
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(msg)
+      .then(()=>showToast('✅ Gekopieerd! Open nu de groep.','success'))
+      .catch(()=>fallbackCopy(msg));
+  } else { fallbackCopy(msg); }
+};
+
+function fallbackCopy(msg) {
+  const ta = document.createElement('textarea');
+  ta.value=msg; ta.style.cssText='position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); showToast('✅ Gekopieerd! Open nu de groep.','success'); }
+  catch(e) { showToast('Kopieer het bericht handmatig','error'); }
+  document.body.removeChild(ta);
+}
+
+window.openWAGroup = function() {
+  window.open(window._waGroupLink || state.config.whatsappLink,'_blank');
+};
 
 // ── SHEET ──
 window.openSheet = function(html) {
