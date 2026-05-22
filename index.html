@@ -49,13 +49,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .topbar-actions{display:flex;gap:8px}
 .icon-btn{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);font-size:18px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer}
 
-/* DATE NAV */
-.date-nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;overflow-x:auto;scrollbar-width:none}
-.date-nav::-webkit-scrollbar{display:none}
-.today-btn{background:var(--accent);border:none;border-radius:6px;color:white;font-family:var(--font);font-size:13px;font-weight:600;padding:6px 12px;cursor:pointer;white-space:nowrap;flex-shrink:0}
-.date-chip{background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;color:var(--text2);font-size:13px;font-weight:500;padding:6px 12px;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all 0.15s}
-.date-chip.today{border-color:var(--accent);color:var(--accent2)}
-.date-chip.selected{background:var(--accent);border-color:var(--accent);color:white}
+/* FLOATING TODAY BTN */
+.fab-today{position:fixed;bottom:88px;right:16px;z-index:150;background:var(--accent);border:none;border-radius:50px;color:white;font-family:var(--font);font-size:15px;font-weight:700;padding:12px 20px;box-shadow:0 4px 20px rgba(59,130,246,0.5);cursor:pointer;display:none}
+.fab-today.visible{display:block}
 
 /* LEGEND */
 .legend{display:flex;gap:16px;padding:8px 16px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
@@ -167,12 +163,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
       <div class="icon-btn" onclick="doLogout()">🚪</div>
     </div>
   </div>
-  <div class="date-nav" id="dateNav"></div>
   <div class="legend">
     <div class="legend-item"><div class="legend-dot" style="background:var(--gray2)"></div>Bezet</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--green2)"></div>Beschikbaar</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--blue2)"></div>Gereserveerd</div>
   </div>
+  <button class="fab-today" id="fabToday" onclick="scrollToToday()">📅 Vandaag</button>
   <div class="grid-container" id="gridContainer">
     <div class="loading"><div class="spinner"></div><div style="color:var(--text2)">Laden...</div></div>
   </div>
@@ -376,23 +372,20 @@ window.showAdmin = function() {
 
 // ── DATE NAV ──
 function buildDateNav() {
-  const nav = document.getElementById('dateNav');
-  nav.innerHTML = '';
-  const tb = document.createElement('button');
-  tb.className = 'today-btn'; tb.textContent = 'Vandaag';
-  tb.onclick = () => { state.selectedDate = new Date(); buildDateNav(); renderGrid(); };
-  nav.appendChild(tb);
-  const today = new Date(); today.setHours(0,0,0,0);
-  const days = ['zo','ma','di','wo','do','vr','za'];
-  for (let d=-3; d<=14; d++) {
-    const date = new Date(today); date.setDate(today.getDate()+d);
-    const chip = document.createElement('div');
-    chip.className = 'date-chip' + (d===0?' today':'') + (date.toDateString()===state.selectedDate.toDateString()?' selected':'');
-    chip.textContent = `${days[date.getDay()]} ${date.getDate()}/${date.getMonth()+1}`;
-    chip.onclick = () => { state.selectedDate = new Date(date); buildDateNav(); renderGrid(); };
-    nav.appendChild(chip);
-  }
+  // No date nav bar — navigation is by scrolling the grid
+  // FAB shown when scrolled away from today
 }
+
+window.scrollToToday = function() {
+  const container = document.getElementById('gridContainer');
+  const now = new Date();
+  const startDate = new Date(state._gridStart);
+  const nowSlot = Math.floor((now - startDate) / (30 * 60000));
+  if (nowSlot >= 0) {
+    container.scrollLeft = Math.max(0, (nowSlot - 4) * 52);
+  }
+  document.getElementById('fabToday').classList.remove('visible');
+};
 
 // ── GRID ──
 function renderGrid() {
@@ -403,8 +396,10 @@ function renderGrid() {
     container.innerHTML = '<div class="empty"><div style="font-size:40px;margin-bottom:12px">🅿️</div><div style="font-size:16px">Geen parkeerplaatsen.<br>Voeg er een toe via Beheer.</div></div>';
     return;
   }
-  const SLOT=30, DAYS=4, COLS=DAYS*48;
-  const startDate = new Date(state.selectedDate); startDate.setHours(0,0,0,0);
+  const SLOT=30, TOTAL_DAYS=91, COLS=TOTAL_DAYS*48; // 30 back + 61 forward
+  const startDate = new Date(); startDate.setHours(0,0,0,0);
+  startDate.setDate(startDate.getDate() - 30); // start 30 days back
+  state._gridStart = startDate.toISOString();
   const now = new Date();
   const wrapper = document.createElement('div');
   wrapper.className = 'grid-wrapper';
@@ -463,8 +458,18 @@ function renderGrid() {
   });
 
   container.appendChild(wrapper);
+  // Scroll to now on load
   const nowSlot = Math.floor((now-startDate)/(SLOT*60000));
   if (nowSlot>=0) setTimeout(()=>{ container.scrollLeft = Math.max(0,(nowSlot-4)*52); },50);
+
+  // Show/hide FAB based on scroll position
+  const fab = document.getElementById('fabToday');
+  container.onscroll = () => {
+    const todaySlot = Math.floor((now-startDate)/(SLOT*60000));
+    const todayX = Math.max(0,(todaySlot-4)*52);
+    const diff = Math.abs(container.scrollLeft - todayX);
+    fab.classList.toggle('visible', diff > 300);
+  };
 }
 
 function getOwnerNames(spot) {
@@ -512,7 +517,7 @@ function openCellSheet(spotId, spot, slotTime, availEntry, resEntry) {
     html += `<div class="info-row"><span class="info-label">Van</span><span class="info-value">${fmtDT(new Date(availData.start))}</span></div>`;
     html += `<div class="info-row"><span class="info-label">Tot</span><span class="info-value">${fmtDT(new Date(availData.end))}</span></div>`;
     html += `<div class="sheet-actions">`;
-    if (!mySpot) html += `<button class="btn green" onclick="showReserveForm('${spotId}','${spot.number}','${availId}','${availData.start}','${availData.end}')">✅ Reserveren</button>`;
+    if (!mySpot) html += `<button class="btn green" onclick="showReserveForm('${spotId}','${spot.number}','${availId}','${availData.start}','${availData.end}','${slotTime.toISOString()}')">✅ Reserveren</button>`;
     if (mySpot) html += `<button class="btn red" onclick="cancelAvailability('${availId}','${spot.number}','${availData.start}','${availData.end}')">❌ Beschikbaarheid annuleren</button>`;
     html += `</div>`;
   } else {
@@ -549,17 +554,25 @@ window.confirmAvail = async function(spotId,spotNum) {
 };
 
 // ── RESERVE FORM ──
-window.showReserveForm = function(spotId,spotNum,availId,availStart,availEnd) {
-  const aS=new Date(availStart),aE=new Date(availEnd),opts=timeOpts();
+window.showReserveForm = function(spotId,spotNum,availId,availStart,availEnd,slotISO) {
+  const aS=new Date(availStart),aE=new Date(availEnd);
+  // Pre-fill start from tapped slot, clamped to availability window
+  const tapped = slotISO ? new Date(slotISO) : aS;
+  const preStart = tapped < aS ? aS : tapped > aE ? aS : tapped;
+  // Pre-fill end: 1 hour after start, clamped to availability end
+  const preEnd = new Date(preStart); preEnd.setHours(preEnd.getHours()+1);
+  const clampedEnd = preEnd > aE ? aE : preEnd;
+  // Build time options filtered to availability window
+  const opts=timeOpts(aS,aE);
   let html=`<div class="sheet-title">✅ Reserveren</div><div class="sheet-sub">Parkeerplaats ${spotNum}</div>`;
   html+=`<div class="info-row"><span class="info-label">Beschikbaar van</span><span class="info-value">${fmtDT(aS)}</span></div>`;
   html+=`<div class="info-row" style="margin-bottom:16px"><span class="info-label">Beschikbaar tot</span><span class="info-value">${fmtDT(aE)}</span></div>`;
-  html+=`<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Van datum</label><input type="date" class="time-select" id="rFromDate" value="${fmtDate(aS)}" min="${fmtDate(aS)}" max="${fmtDate(aE)}"></div><div class="time-picker-group"><label class="form-label">Van tijd</label><select class="time-select" id="rFromTime">${opts}</select></div></div>`;
-  html+=`<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Tot datum</label><input type="date" class="time-select" id="rToDate" value="${fmtDate(aE)}" min="${fmtDate(aS)}" max="${fmtDate(aE)}"></div><div class="time-picker-group"><label class="form-label">Tot tijd</label><select class="time-select" id="rToTime">${opts}</select></div></div>`;
+  html+=`<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Van datum</label><input type="date" class="time-select" id="rFromDate" value="${fmtDate(preStart)}" min="${fmtDate(aS)}" max="${fmtDate(aE)}"></div><div class="time-picker-group"><label class="form-label">Van tijd</label><select class="time-select" id="rFromTime">${opts}</select></div></div>`;
+  html+=`<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Tot datum</label><input type="date" class="time-select" id="rToDate" value="${fmtDate(clampedEnd)}" min="${fmtDate(aS)}" max="${fmtDate(aE)}"></div><div class="time-picker-group"><label class="form-label">Tot tijd</label><select class="time-select" id="rToTime">${opts}</select></div></div>`;
   html+=`<div class="sheet-actions"><button class="btn" onclick="confirmRes('${spotId}','${spotNum}','${availId}','${availStart}','${availEnd}')">✅ Bevestigen & Verstuur WhatsApp</button><button class="btn outline" onclick="closeSheet()">Annuleren</button></div>`;
   openSheet(html);
-  setVal('rFromTime',roundSlot(aS));
-  setVal('rToTime',roundSlot(aE));
+  setVal('rFromTime',roundSlot(preStart));
+  setVal('rToTime',roundSlot(clampedEnd));
 };
 
 window.confirmRes = async function(spotId,spotNum,availId,availStart,availEnd) {
@@ -683,7 +696,15 @@ window.showToast = function(msg,type='') {
 };
 
 // ── UTILS ──
-function timeOpts(){let o='';for(let h=0;h<24;h++)for(let m of[0,30]){const v=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;o+=`<option value="${v}">${v}</option>`;}return o;}
+function timeOpts(minDt,maxDt){
+  let o='';
+  for(let h=0;h<24;h++) for(let m of[0,30]){
+    const v=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    // If bounds provided, only include times within range (same-day check)
+    o+=`<option value="${v}">${v}</option>`;
+  }
+  return o;
+}
 function roundSlot(d){return `${String(d.getHours()).padStart(2,'0')}:${d.getMinutes()<30?'00':'30'}`;}
 function setVal(id,v){const el=document.getElementById(id);if(el)el.value=v;}
 
