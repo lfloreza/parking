@@ -54,9 +54,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .topbar-actions{display:flex;gap:8px}
 .icon-btn{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);font-size:18px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer}
 
-/* FLOATING TODAY BTN */
-.fab-today{position:fixed;bottom:88px;right:16px;z-index:150;background:var(--accent);border:none;border-radius:50px;color:white;font-family:var(--font);font-size:15px;font-weight:700;padding:12px 20px;box-shadow:0 4px 20px rgba(59,130,246,0.5);cursor:pointer;display:none}
-.fab-today.visible{display:block}
+/* WEEK NAV BAR */
+.week-nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
+.week-nav-label{font-size:14px;font-weight:600;color:var(--text2);flex:1;text-align:center}
+.week-nav-btn{background:var(--bg3);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:16px;font-weight:700;padding:8px 16px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.week-nav-btn:active{background:var(--accent);border-color:var(--accent)}
+.week-nav-btn.today{background:var(--accent);border-color:var(--accent);color:white;font-size:13px}
 
 /* LEGEND */
 .legend{display:flex;gap:16px;padding:8px 16px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
@@ -175,7 +178,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <div class="legend-item"><div class="legend-dot" style="background:var(--green2)"></div>Beschikbaar</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--blue2)"></div>Gereserveerd</div>
   </div>
-  <button class="fab-today" id="fabToday" onclick="scrollToToday()">📅 Vandaag</button>
+  <div class="week-nav">
+    <button class="week-nav-btn" onclick="shiftWindow(-7)">◀ Vorige</button>
+    <div class="week-nav-label" id="weekNavLabel"></div>
+    <button class="week-nav-btn today" onclick="goToToday()">Vandaag</button>
+    <button class="week-nav-btn" onclick="shiftWindow(7)">Volgende ▶</button>
+  </div>
   <div class="grid-container" id="gridContainer">
     <div class="loading"><div class="spinner"></div><div style="color:var(--text2)">Laden...</div></div>
   </div>
@@ -369,7 +377,8 @@ window.showMain = function() {
   showScreen('mainScreen');
   document.getElementById('adminBtn').style.display =
     (state.user?.role==='admin'||state.user?.role==='super') ? 'flex' : 'none';
-  buildDateNav(); renderGrid();
+  if (!state._windowStart) initWindow();
+  renderGrid();
 };
 
 window.showAdmin = function() {
@@ -378,24 +387,46 @@ window.showAdmin = function() {
 };
 
 // ── DATE NAV ──
-function buildDateNav() {
-  // No date nav bar — navigation is by scrolling the grid
-  // FAB shown when scrolled away from today
+// Window = 7 days rendered at a time
+// state._windowStart = date of first day shown (midnight)
+// Navigable range: 2 days back to 60 days forward from today
+
+function getToday() { const d=new Date(); d.setHours(0,0,0,0); return d; }
+
+function initWindow() {
+  const d = getToday(); d.setDate(d.getDate()-2); // start 2 days back
+  state._windowStart = d;
 }
 
-window.scrollToToday = function() {
-  const container = document.getElementById('gridContainer');
-  const now = new Date();
-  const startDate = new Date(state._gridStart);
-  const nowSlot = Math.floor((now - startDate) / (30 * 60000));
-  if (nowSlot >= 0) {
-    container.scrollLeft = Math.max(0, (nowSlot - 4) * 52);
-  }
-  document.getElementById('fabToday').classList.remove('visible');
+window.shiftWindow = function(days) {
+  const today = getToday();
+  const minDate = new Date(today); minDate.setDate(today.getDate()-2);
+  const maxDate = new Date(today); maxDate.setDate(today.getDate()+53); // 60-7
+  const next = new Date(state._windowStart);
+  next.setDate(next.getDate()+days);
+  if (next < minDate) next.setTime(minDate.getTime());
+  if (next > maxDate) next.setTime(maxDate.getTime());
+  state._windowStart = next;
+  renderGrid();
 };
+
+window.goToToday = function() {
+  const d = getToday(); d.setDate(d.getDate()-2);
+  state._windowStart = d;
+  renderGrid();
+};
+
+function updateWeekLabel() {
+  const start = new Date(state._windowStart);
+  const end = new Date(start); end.setDate(end.getDate()+6);
+  const nlMonths=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  const fmt = d => `${d.getDate()} ${nlMonths[d.getMonth()]}`;
+  document.getElementById('weekNavLabel').textContent = `${fmt(start)} – ${fmt(end)}`;
+}
 
 // ── GRID ──
 function renderGrid() {
+  updateWeekLabel();
   const container = document.getElementById('gridContainer');
   container.innerHTML = '';
   const spots = Object.entries(state.spots).sort((a,b)=>Number(a[1].number)-Number(b[1].number));
@@ -403,11 +434,13 @@ function renderGrid() {
     container.innerHTML = '<div class="empty"><div style="font-size:40px;margin-bottom:12px">🅿️</div><div style="font-size:16px">Geen parkeerplaatsen.<br>Voeg er een toe via Beheer.</div></div>';
     return;
   }
-  const SLOT=30, TOTAL_DAYS=91, COLS=TOTAL_DAYS*48; // 30 back + 61 forward
-  const startDate = new Date(); startDate.setHours(0,0,0,0);
-  startDate.setDate(startDate.getDate() - 30); // start 30 days back
-  state._gridStart = startDate.toISOString();
+
+  const SLOT=30, DAYS=7, COLS=DAYS*48; // 7 days × 48 slots
+  const startDate = new Date(state._windowStart);
   const now = new Date();
+  const nlDays=['zo','ma','di','wo','do','vr','za'];
+  const nlMonths=['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+
   const wrapper = document.createElement('div');
   wrapper.className = 'grid-wrapper';
   wrapper.style.gridTemplateColumns = `110px repeat(${COLS},52px)`;
@@ -418,20 +451,15 @@ function renderGrid() {
   dayCorner.style.cssText = 'grid-row:1;grid-column:1';
   wrapper.appendChild(dayCorner);
 
-  const nlDays = ['zo','ma','di','wo','do','vr','za'];
-  const nlMonths = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-  let lastDay = -1;
   for (let i=0; i<COLS; i++) {
     const t = new Date(startDate); t.setMinutes(i*SLOT);
-    const dayKey = t.toDateString();
     const th = document.createElement('div');
     th.className = 'grid-day-header';
     th.style.cssText = `grid-row:1;grid-column:${i+2}`;
-    // Only show label at start of each day (midnight slot)
     if (t.getHours()===0 && t.getMinutes()===0) {
-      const isToday = t.toDateString() === now.toDateString();
-      th.textContent = isToday ? '📍 Vandaag' : `${nlDays[t.getDay()]} ${t.getDate()} ${nlMonths[t.getMonth()]}`;
-      if (isToday) th.style.color = 'var(--yellow)';
+      const isToday = t.toDateString()===now.toDateString();
+      th.textContent = isToday ? `📍 ${nlDays[t.getDay()]} ${t.getDate()} ${nlMonths[t.getMonth()]}` : `${nlDays[t.getDay()]} ${t.getDate()} ${nlMonths[t.getMonth()]}`;
+      th.style.color = isToday ? 'var(--yellow)' : '';
       th.style.borderLeft = '2px solid var(--border)';
     }
     wrapper.appendChild(th);
@@ -452,6 +480,7 @@ function renderGrid() {
     wrapper.appendChild(th);
   }
 
+  // Spot rows
   spots.forEach(([spotId,spot],si) => {
     const mySpot = isMySpot(spot);
     const label = document.createElement('div');
@@ -490,18 +519,14 @@ function renderGrid() {
   });
 
   container.appendChild(wrapper);
-  // Scroll to now on load
-  const nowSlot = Math.floor((now-startDate)/(SLOT*60000));
-  if (nowSlot>=0) setTimeout(()=>{ container.scrollLeft = Math.max(0,(nowSlot-4)*52); },50);
-
-  // Show/hide FAB based on scroll position
-  const fab = document.getElementById('fabToday');
-  container.onscroll = () => {
-    const todaySlot = Math.floor((now-startDate)/(SLOT*60000));
-    const todayX = Math.max(0,(todaySlot-4)*52);
-    const diff = Math.abs(container.scrollLeft - todayX);
-    fab.classList.toggle('visible', diff > 300);
-  };
+  // Scroll to current time if today is visible
+  const todayInWindow = now >= startDate && now < new Date(startDate.getTime() + DAYS*24*60*60*1000);
+  if (todayInWindow) {
+    const nowSlot = Math.floor((now-startDate)/(SLOT*60000));
+    setTimeout(()=>{ container.scrollLeft = Math.max(0,(nowSlot-2)*52); },50);
+  } else {
+    setTimeout(()=>{ container.scrollLeft = 0; },50);
+  }
 }
 
 function getOwnerNames(spot) {
