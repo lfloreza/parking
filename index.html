@@ -72,6 +72,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .grid-container::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .grid-wrapper{display:grid;min-width:max-content}
 .grid-spot-label{position:sticky;left:0;background:var(--bg2);border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 12px;min-width:110px;z-index:8;display:flex;flex-direction:column;justify-content:center}
+.grid-spot-label.my-label{background:rgba(59,130,246,0.07);border-left:3px solid var(--accent)}
+.avail-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-left:5px;vertical-align:middle;flex-shrink:0}
 .spot-number{font-size:15px;font-weight:700;color:var(--text);font-family:var(--mono)}
 .spot-owner{font-size:11px;color:var(--text3);margin-top:2px}
 .grid-day-header{position:sticky;top:0;background:var(--bg3);border-bottom:2px solid var(--accent);border-right:1px solid var(--border);padding:7px 4px;text-align:center;font-size:13px;font-weight:700;color:var(--accent2);z-index:10;min-width:52px;white-space:nowrap;letter-spacing:0.02em;height:32px}
@@ -297,8 +299,8 @@ async function init() {
       const d = snap.val();
       state.users = d.users || {};
       state.spots = d.spots || {};
-      state.availability = d.availability || {};
-      state.reservations = d.reservations || {};
+      state.availability = Object.fromEntries(Object.entries(d.availability || {}).filter(([,a]) => a.status === 'available'));
+      state.reservations = Object.fromEntries(Object.entries(d.reservations || {}).filter(([,r]) => r.status === 'active'));
       if (d.config) state.config = { ...state.config, ...d.config };
     } else {
       await set(ref(db,'users/u_super'), {name:'Lucas',pin:'1234',role:'super',active:true});
@@ -499,9 +501,15 @@ function renderGrid() {
   spots.forEach(([spotId,spot],si) => {
     const mySpot = isMySpot(spot);
     const label = document.createElement('div');
-    label.className = 'grid-spot-label';
+    label.className = 'grid-spot-label' + (mySpot ? ' my-label' : '');
     label.style.cssText = `grid-row:${si+3};grid-column:1`;
-    label.innerHTML = `<div class="spot-number">${spot.number}</div><div class="spot-owner">${getOwnerNames(spot)}</div>`;
+    // Check if spot has any future availability
+    const now2 = new Date();
+    const hasFutureAvail = Object.values(state.availability).some(a =>
+      a.spotId === spotId && a.status === 'available' && new Date(a.end) > now2
+    );
+    const dot = hasFutureAvail ? '<span class="avail-dot" title="Heeft beschikbaarheid"></span>' : '';
+    label.innerHTML = `<div class="spot-number" style="display:flex;align-items:center">${spot.number}${dot}</div><div class="spot-owner">${getOwnerNames(spot)}</div>`;
     wrapper.appendChild(label);
 
     for (let i=0; i<COLS; i++) {
