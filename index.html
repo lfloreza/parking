@@ -565,7 +565,7 @@ window.showAvailForm = function(spotId,spotNum,fromISO) {
   let html = `<div class="sheet-title">🟢 Beschikbaar stellen</div><div class="sheet-sub">Parkeerplaats ${spotNum}</div>`;
   html += `<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Van datum</label><input type="date" class="time-select" id="aFromDate" value="${fmtDate(from)}"></div><div class="time-picker-group"><label class="form-label">Van tijd</label><select class="time-select" id="aFromTime">${opts}</select></div></div>`;
   html += `<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Tot datum</label><input type="date" class="time-select" id="aToDate" value="${fmtDate(from)}"></div><div class="time-picker-group"><label class="form-label">Tot tijd</label><select class="time-select" id="aToTime">${opts}</select></div></div>`;
-  html += `<div class="sheet-actions"><button class="btn green" onclick="confirmAvail('${spotId}','${spotNum}')">✅ Bevestigen & Verstuur WhatsApp</button><button class="btn outline" onclick="closeSheet()">Annuleren</button></div>`;
+  html += `<div class="sheet-actions"><button class="btn green" id="confirmAvailBtn" onclick="confirmAvail('${spotId}','${spotNum}')">✅ Bevestigen & Verstuur WhatsApp</button><button class="btn outline" onclick="closeSheet()">Annuleren</button></div>`;
   openSheet(html);
   setVal('aFromTime',roundSlot(from));
   const to=new Date(from); to.setHours(to.getHours()+2);
@@ -576,13 +576,19 @@ window.confirmAvail = async function(spotId,spotNum) {
   const start=new Date(`${g('aFromDate')}T${g('aFromTime')}:00`);
   const end=new Date(`${g('aToDate')}T${g('aToTime')}:00`);
   if (end<=start){showToast('Eindtijd moet na starttijd zijn','error');return;}
+  setBtnLoading('confirmAvailBtn', true);
   const id='av_'+uid();
   const data={spotId,start:start.toISOString(),end:end.toISOString(),createdBy:state.user.id,status:'available'};
-  await set(ref(db,`availability/${id}`),data);
-  state.availability[id]=data;
-  closeSheet(); renderGrid();
-  showToast('✅ Beschikbaarheid opgeslagen!','success');
-  sendWA('available',spotNum,start,end);
+  try {
+    await set(ref(db,`availability/${id}`),data);
+    state.availability[id]=data;
+    closeSheet(); renderGrid();
+    showToast('✅ Beschikbaarheid opgeslagen!','success');
+    sendWA('available',spotNum,start,end);
+  } catch(e) {
+    showToast('Fout bij opslaan. Probeer opnieuw.','error');
+    setBtnLoading('confirmAvailBtn', false);
+  }
 };
 
 // ── RESERVE FORM ──
@@ -601,7 +607,7 @@ window.showReserveForm = function(spotId,spotNum,availId,availStart,availEnd,slo
   html+=`<div class="info-row" style="margin-bottom:16px"><span class="info-label">Beschikbaar tot</span><span class="info-value">${fmtDT(aE)}</span></div>`;
   html+=`<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Van datum</label><input type="date" class="time-select" id="rFromDate" value="${fmtDate(preStart)}" min="${fmtDate(aS)}" max="${fmtDate(aE)}"></div><div class="time-picker-group"><label class="form-label">Van tijd</label><select class="time-select" id="rFromTime">${opts}</select></div></div>`;
   html+=`<div class="time-picker-row"><div class="time-picker-group"><label class="form-label">Tot datum</label><input type="date" class="time-select" id="rToDate" value="${fmtDate(clampedEnd)}" min="${fmtDate(aS)}" max="${fmtDate(aE)}"></div><div class="time-picker-group"><label class="form-label">Tot tijd</label><select class="time-select" id="rToTime">${opts}</select></div></div>`;
-  html+=`<div class="sheet-actions"><button class="btn" onclick="confirmRes('${spotId}','${spotNum}','${availId}','${availStart}','${availEnd}')">✅ Bevestigen & Verstuur WhatsApp</button><button class="btn outline" onclick="closeSheet()">Annuleren</button></div>`;
+  html+=`<div class="sheet-actions"><button class="btn" id="confirmResBtn" onclick="confirmRes('${spotId}','${spotNum}','${availId}','${availStart}','${availEnd}')">✅ Bevestigen & Verstuur WhatsApp</button><button class="btn outline" onclick="closeSheet()">Annuleren</button></div>`;
   openSheet(html);
   setVal('rFromTime',roundSlot(preStart));
   setVal('rToTime',roundSlot(clampedEnd));
@@ -613,21 +619,24 @@ window.confirmRes = async function(spotId,spotNum,availId,availStart,availEnd) {
   const aS=new Date(availStart),aE=new Date(availEnd);
   if (end<=start){showToast('Eindtijd moet na starttijd zijn','error');return;}
   if (start<aS||end>aE){showToast('Tijden vallen buiten de beschikbaarheidsperiode','error');return;}
-
-  // Check no conflicting active reservation exists
   const conflict = Object.values(state.reservations).find(r=>
     r.spotId===spotId && r.status==='active' &&
     new Date(r.start)<end && new Date(r.end)>start
   );
   if (conflict){showToast('Dit tijdslot is al gereserveerd','error');return;}
-
+  setBtnLoading('confirmResBtn', true);
   const id='res_'+uid();
   const data={spotId,availId,reservedBy:state.user.id,start:start.toISOString(),end:end.toISOString(),status:'active'};
-  await set(ref(db,`reservations/${id}`),data);
-  state.reservations[id]=data;
-  closeSheet(); renderGrid();
-  showToast('✅ Gereserveerd!','success');
-  sendWA('reserved',spotNum,start,end,state.user.name);
+  try {
+    await set(ref(db,`reservations/${id}`),data);
+    state.reservations[id]=data;
+    closeSheet(); renderGrid();
+    showToast('✅ Gereserveerd!','success');
+    sendWA('reserved',spotNum,start,end,state.user.name);
+  } catch(e) {
+    showToast('Fout bij opslaan. Probeer opnieuw.','error');
+    setBtnLoading('confirmResBtn', false);
+  }
 };
 
 // ── CANCEL ──
@@ -852,7 +861,29 @@ window.saveSpot = async function() {
   showToast('Parkeerplaats opgeslagen','success');
 };
 
-init();
+// ── LOADING HELPER ──
+function setBtnLoading(id, loading) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  if (loading) {
+    btn._origText = btn.innerHTML;
+    btn.innerHTML = '<span style="display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,0.4);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle"></span> Bezig...';
+    btn.disabled = true;
+  } else {
+    btn.innerHTML = btn._origText || btn.innerHTML;
+    btn.disabled = false;
+  }
+}
+
+// ── FIREBASE KEEPALIVE ──
+// Ping every 4 minutes to keep connection warm
+function startKeepalive() {
+  setInterval(async () => {
+    try { await get(ref(db, 'config/appUrl')); } catch(e) {}
+  }, 4 * 60 * 1000);
+}
+
+init().then(startKeepalive);
 </script>
 </body>
 </html>
