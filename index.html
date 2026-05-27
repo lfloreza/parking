@@ -227,7 +227,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <label class="form-label">Naam</label>
     <input class="form-input" id="editUserName" placeholder="Voornaam">
     <label class="form-label">PIN (4 cijfers)</label>
-    <input class="form-input" id="editUserPin" placeholder="1234" maxlength="4" inputmode="numeric">
+    <input class="form-input" id="editUserPin" placeholder="····" maxlength="4" inputmode="numeric">
     <label class="form-label">Rol</label>
     <select class="form-select" id="editUserRole" style="margin-bottom:0">
       <option value="neighbor">Buur</option>
@@ -266,6 +266,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCUWzsQjgYfwTMISXBaR5x0vT1ibEHDQUE",
@@ -279,6 +280,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const auth = getAuth(app);
 
 let state = {
   user: null,
@@ -296,8 +298,24 @@ function fmtDate(dt) { return dt.toISOString().split('T')[0]; }
 function g(id) { return document.getElementById(id)?.value || ''; }
 window.closeModal = id => document.getElementById(id).classList.remove('active');
 
+// ── SHA-256 PIN HASHING ──
+async function hashPIN(pin) {
+  const msgBuffer = new TextEncoder().encode(pin);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
 // ── INIT ──
 async function init() {
+  // Sign in anonymously first — required for Firebase security rules
+  try {
+    await signInAnonymously(auth);
+  } catch(e) {
+    console.error('Auth error:', e);
+    showToast('Verbindingsfout. Ververs de pagina.', 'error');
+    return;
+  }
   try {
     const snap = await get(ref(db));
     if (snap.exists()) {
@@ -308,9 +326,7 @@ async function init() {
       state.reservations = Object.fromEntries(Object.entries(d.reservations || {}).filter(([,r]) => r.status === 'active'));
       if (d.config) state.config = { ...state.config, ...d.config };
     } else {
-      await set(ref(db,'users/u_super'), {name:'Lucas',pin:'1234',role:'super',active:true});
-      await set(ref(db,'config'), state.config);
-      state.users = {u_super:{name:'Lucas',pin:'1234',role:'super',active:true}};
+      // Database empty — no seed data. Set up users via Firebase console.
     }
   } catch(e) { console.error('Firebase error:', e); }
 
@@ -350,13 +366,22 @@ function checkLoginReady() {
 pinInput.addEventListener('input', checkLoginReady);
 document.getElementById('loginName').addEventListener('change', checkLoginReady);
 
-window.doLogin = function() {
+window.doLogin = async function() {
   const id = g('loginName');
   const pin = pinInput.value;
   const err = document.getElementById('loginError');
   err.style.display = 'none';
   const u = state.users[id];
-  if (!u || String(u.pin) !== pin) {
+  if (!u) {
+    err.textContent = 'Ongeldige naam of PIN. Probeer opnieuw.';
+    err.style.display = 'block';
+    pinInput.value = ''; checkLoginReady();
+    return;
+  }
+  // Support both hashed and legacy plaintext PINs
+  const hashed = await hashPIN(pin);
+  const pinMatch = String(u.pin) === pin || String(u.pin) === hashed;
+  if (!pinMatch) {
     err.textContent = 'Ongeldige naam of PIN. Probeer opnieuw.';
     err.style.display = 'block';
     pinInput.value = ''; checkLoginReady();
@@ -533,7 +558,19 @@ function renderGrid() {
     });
     const dot = hasFutureAvail ? '<span class="avail-dot" title="Heeft beschikbaarheid"></span>' : '';
     const charger = spot.hasCharger ? '<span title="Laadpaal beschikbaar" style="margin-left:4px;font-size:12px">⚡</span>' : '';
-    label.innerHTML = `<div class="spot-number" style="display:flex;align-items:center">${spot.number}${charger}${dot}</div><div class="spot-owner">${getOwnerNames(spot)}</div>`;
+    const numDiv = document.createElement('div');
+    numDiv.style.cssText='display:flex;align-items:center';
+    const numText = document.createElement('span');
+    numText.textContent = spot.number;
+    numDiv.appendChild(numText);
+    if (spot.hasCharger) { const c=document.createElement('span'); c.title='Laadpaal beschikbaar'; c.style.cssText='margin-left:4px;font-size:12px'; c.textContent='⚡'; numDiv.appendChild(c); }
+    if (hasFutureAvail) { const d=document.createElement('span'); d.className='avail-dot'; d.title='Heeft beschikbaarheid'; numDiv.appendChild(d); }
+    numDiv.className='spot-number';
+    const ownerDiv = document.createElement('div');
+    ownerDiv.className='spot-owner';
+    ownerDiv.textContent = getOwnerNames(spot);
+    label.appendChild(numDiv);
+    label.appendChild(ownerDiv);
     wrapper.appendChild(label);
 
     for (let i=0; i<COLS; i++) {
@@ -550,7 +587,7 @@ function renderGrid() {
       if (resEntry) {
         cell.classList.add('reserved');
         const ru = state.users[resEntry[1].reservedBy];
-        if (ru) { const l=document.createElement('div'); l.className='cell-label'; l.textContent=ru.name; cell.appendChild(l); }
+        if (ru) { const l=document.createElement('div'); l.className='cell-label'; l.textContent=ru.name.substring(0,10); cell.appendChild(l); }
       } else if (availEntry) {
         cell.classList.add('available');
       } else if (mySpot) {
@@ -886,9 +923,10 @@ window.openUserModal = function(userId=null) {
 window.saveUser = async function() {
   const id=g('editUserId')||'u_'+uid();
   const name=document.getElementById('editUserName').value.trim();
-  const pin=document.getElementById('editUserPin').value.trim();
+  const pinRaw=document.getElementById('editUserPin').value.trim();
   const role=g('editUserRole');
-  if (!name||!/^\d{4}$/.test(pin)){showToast('Vul naam en 4-cijferige PIN in','error');return;}
+  if (!name||!/^\d{4}$/.test(pinRaw)){showToast('Vul naam en 4-cijferige PIN in','error');return;}
+  const pin = await hashPIN(pinRaw);
   const existing=state.users[id];
   const data={name,pin,role,active:existing?.active??true};
   await set(ref(db,`users/${id}`),data);
